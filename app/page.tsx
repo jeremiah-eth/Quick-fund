@@ -7,6 +7,7 @@ import FundingDashboard from '@/components/FundingDashboard'
 import ClientOnly from '@/components/ClientOnly'
 import { Proposal, Donation, CreateProposalData, DonationData } from '@/types/expense'
 import { useBaseAccount } from '@/hooks/useBaseAccount'
+import { sharedDataAPI } from '@/lib/sharedData'
 
 // Main page component with Base Account SDK integration
 export default function Home() {
@@ -25,51 +26,32 @@ export default function Home() {
     connectWallet,
   } = useBaseAccount()
 
-  // Load data from localStorage on mount
+  // Load data from shared API on mount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedProposals = localStorage.getItem('quick-fund-proposals')
-      const savedDonations = localStorage.getItem('quick-fund-donations')
-      
-      if (savedProposals) {
-        try {
-          const parsed = JSON.parse(savedProposals)
-          setProposals(parsed.map((p: any) => ({
-            ...p,
-            createdAt: new Date(p.createdAt),
-            deadline: p.deadline ? new Date(p.deadline) : undefined,
-          })))
-        } catch (error) {
-          console.error('Failed to load proposals:', error)
-        }
-      }
-      
-      if (savedDonations) {
-        try {
-          const parsed = JSON.parse(savedDonations)
-          setDonations(parsed.map((d: any) => ({
-            ...d,
-            createdAt: new Date(d.createdAt),
-          })))
-        } catch (error) {
-          console.error('Failed to load donations:', error)
-        }
+    const loadData = async () => {
+      try {
+        const [proposalsData, donationsData] = await Promise.all([
+          sharedDataAPI.getProposals(),
+          sharedDataAPI.getDonations()
+        ])
+        
+        setProposals(proposalsData.map((p: any) => ({
+          ...p,
+          createdAt: new Date(p.createdAt),
+          deadline: p.deadline ? new Date(p.deadline) : undefined,
+        })))
+        
+        setDonations(donationsData.map((d: any) => ({
+          ...d,
+          createdAt: new Date(d.createdAt),
+        })))
+      } catch (error) {
+        console.error('Failed to load data:', error)
       }
     }
+    
+    loadData()
   }, [])
-
-  // Save data to localStorage whenever it changes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('quick-fund-proposals', JSON.stringify(proposals))
-    }
-  }, [proposals])
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('quick-fund-donations', JSON.stringify(donations))
-    }
-  }, [donations])
 
   // Debug logging (only on client side)
   if (typeof window !== 'undefined') {
@@ -88,15 +70,13 @@ export default function Home() {
     setIsLoading(true)
     
     try {
-      const newProposal: Proposal = {
-        id: Date.now().toString(),
+      const proposalData = {
         title: data.title,
         description: data.description,
         targetAmount: data.targetAmount,
         currency: data.currency,
         creator: universalAddress,
         creatorBaseName: universalBaseName || undefined,
-        createdAt: new Date(),
         status: 'active',
         currentFunding: 0,
         donations: [],
@@ -106,6 +86,7 @@ export default function Home() {
         tags: data.tags
       }
 
+      const newProposal = await sharedDataAPI.addProposal(proposalData)
       setProposals(prev => [newProposal, ...prev])
       console.log('Proposal created:', newProposal)
       
@@ -127,19 +108,22 @@ export default function Home() {
     setIsLoading(true)
     
     try {
-      const newDonation: Donation = {
-        id: Date.now().toString(),
+      const donationData = {
         donorAddress: universalAddress,
         donorBaseName: universalBaseName || undefined,
         amount: data.amount,
         currency: data.currency,
         proposalId: data.proposalId,
-        createdAt: new Date(),
         status: 'pending',
         message: data.donorMessage
       }
 
-      // Add donation to the proposal
+      const newDonation = await sharedDataAPI.addDonation(donationData)
+      
+      // Update local state
+      setDonations(prev => [newDonation, ...prev])
+      
+      // Update proposals with new funding
       setProposals(prev => prev.map(proposal => 
         proposal.id === data.proposalId 
           ? {
@@ -150,9 +134,6 @@ export default function Home() {
             }
           : proposal
       ))
-
-      // Add to donations list
-      setDonations(prev => [newDonation, ...prev])
 
       // Send transaction
       const proposal = proposals.find(p => p.id === data.proposalId)
