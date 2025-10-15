@@ -71,7 +71,7 @@ export function useBaseAccount() {
   // Check if wallet is already connected on mount
   useEffect(() => {
     const checkExistingConnection = async () => {
-      if (typeof window === 'undefined' || !state.isConnected) return
+      if (typeof window === 'undefined') return
       
       try {
         const { provider } = await initializeSDK()
@@ -81,42 +81,42 @@ export function useBaseAccount() {
             params: []
           }) as string[]
           
-          if (accounts.length > 0 && accounts[0] !== state.universalAddress) {
-            console.log('Wallet accounts changed, updating state')
+          if (accounts.length > 0) {
+            console.log('Found existing wallet connection:', accounts)
             const universalAddress = accounts[0]
             const subAccountAddress = accounts[1] || null
             
+            // Resolve Base Names with timeout
+            const universalBaseName = await Promise.race([
+              resolveUniversalName(universalAddress),
+              new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 5000))
+            ])
+            const subAccountBaseName = subAccountAddress ? await Promise.race([
+              resolveSubAccountName(subAccountAddress),
+              new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 5000))
+            ]) : null
+            
             setState(prev => ({
               ...prev,
+              isConnected: true,
               universalAddress,
               subAccountAddress,
+              universalBaseName,
+              subAccountBaseName,
+              isLoading: false,
+              error: null,
             }))
           }
         }
       } catch (error) {
         console.error('Failed to check existing connection:', error)
+        // Don't set error state here, just log it
       }
     }
     
     checkExistingConnection()
-  }, [state.isConnected, state.universalAddress])
+  }, []) // Only run once on mount
 
-  // Resolve Base Names for both accounts
-  useEffect(() => {
-    if (state.universalAddress) {
-      resolveUniversalName(state.universalAddress).then((name) => {
-        setState(prev => ({ ...prev, universalBaseName: name }))
-      })
-    }
-  }, [state.universalAddress, resolveUniversalName])
-
-  useEffect(() => {
-    if (state.subAccountAddress) {
-      resolveSubAccountName(state.subAccountAddress).then((name) => {
-        setState(prev => ({ ...prev, subAccountBaseName: name }))
-      })
-    }
-  }, [state.subAccountAddress, resolveSubAccountName])
 
   const connectWallet = useCallback(async () => {
     if (typeof window === 'undefined') {
@@ -156,12 +156,24 @@ export function useBaseAccount() {
       console.log('Universal Address:', universalAddress)
       console.log('Sub Account Address:', subAccountAddress)
 
+      // Resolve Base Names with timeout
+      const universalBaseName = await Promise.race([
+        resolveUniversalName(universalAddress),
+        new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 5000))
+      ])
+      const subAccountBaseName = subAccountAddress ? await Promise.race([
+        resolveSubAccountName(subAccountAddress),
+        new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 5000))
+      ]) : null
+
       setState(prev => {
         const newState = {
           ...prev,
           isConnected: true,
           universalAddress,
           subAccountAddress,
+          universalBaseName,
+          subAccountBaseName,
           isLoading: false,
           error: null,
         }
