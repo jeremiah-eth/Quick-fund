@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Wallet, LogOut, Copy, Check, Loader2 } from 'lucide-react'
+import { Wallet, LogOut, Copy, Check, Loader2, Shield } from 'lucide-react'
 import { useBaseAccount } from '@/hooks/useBaseAccount'
 
 export default function WalletConnection() {
@@ -21,6 +21,7 @@ export default function WalletConnection() {
     error,
     connectWallet,
     disconnectWallet,
+    spendPermissions,
   } = useBaseAccount()
 
   const copyToClipboard = async (text: string, type: string) => {
@@ -149,11 +150,33 @@ export default function WalletConnection() {
         )}
       </div>
 
+      {/* Spend Permissions Status */}
       <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-        <p className="text-sm text-blue-800">
-          <strong>Auto Spend Permissions:</strong> Your Sub Account can automatically 
-          approve payments for shared expenses without requiring manual confirmation for each transaction.
-        </p>
+        <div className="flex items-center space-x-2 mb-2">
+          <Shield className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-medium text-blue-800">Auto Spend Permissions</span>
+        </div>
+        {spendPermissions.length > 0 ? (
+          <div className="space-y-1">
+            <p className="text-xs text-blue-700">
+              {spendPermissions.length} active permission{spendPermissions.length !== 1 ? 's' : ''} enabled
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {spendPermissions.map((permission, index) => {
+                const tokenName = permission.token === '0x0000000000000000000000000000000000000000' ? 'ETH' : 'USDC'
+                return (
+                  <span key={index} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                    {tokenName}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-blue-700">
+            Enable auto donations for seamless transactions without repeated approvals.
+          </p>
+        )}
       </div>
     </div>
   )

@@ -4,10 +4,12 @@ import { useState, useEffect } from 'react'
 import { Heart, TrendingUp, Users, DollarSign, Wallet } from 'lucide-react'
 import WalletConnection from '@/components/WalletConnection'
 import FundingDashboard from '@/components/FundingDashboard'
+import SpendPermissionsManager from '@/components/SpendPermissionsManager'
 import ClientOnly from '@/components/ClientOnly'
 import { Proposal, Donation, CreateProposalData, DonationData } from '@/types/expense'
 import { useBaseAccount } from '@/hooks/useBaseAccount'
 import { supabaseAPI } from '@/lib/supabaseAPI'
+import { createUSDCTransaction } from '@/lib/usdcTransfer'
 
 // Main page component with Base Account SDK integration
 export default function Home() {
@@ -24,6 +26,8 @@ export default function Home() {
     subAccountBaseName,
     sendTransaction,
     connectWallet,
+    spendPermissions,
+    useSpendPermission,
   } = useBaseAccount()
 
   // Load data from Supabase on mount
@@ -147,13 +151,42 @@ export default function Home() {
       const proposal = proposals.find(p => p.id === data.proposalId)
       if (proposal) {
         try {
-          const transaction = {
-            to: proposal.creator,
-            value: data.currency === 'ETH' ? (data.amount * 1e18).toString() : '0',
-            from: 'sub' as const
-          }
+          let txHash: string
           
-          const txHash = await sendTransaction(transaction)
+          // Check if user has spend permission for this currency
+          const tokenAddress = data.currency === 'USDC' 
+            ? '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' 
+            : '0x0000000000000000000000000000000000000000'
+          
+          const existingPermission = spendPermissions.find(p => p.token === tokenAddress)
+          
+          if (existingPermission) {
+            // Use Spend Permission for seamless transaction
+            console.log('Using Spend Permission for donation')
+            txHash = await useSpendPermission({
+              permission: existingPermission,
+              amount: data.amount,
+            })
+          } else {
+            // Regular transaction flow
+            if (data.currency === 'ETH') {
+              // Send ETH directly
+              const transaction = {
+                to: proposal.creator,
+                value: (data.amount * 1e18).toString(), // Convert to wei
+                from: 'sub' as const
+              }
+              txHash = await sendTransaction(transaction)
+            } else {
+              // Send USDC token transfer
+              const usdcTransaction = createUSDCTransaction({
+                to: proposal.creator,
+                amount: data.amount,
+                from: 'sub'
+              })
+              txHash = await sendTransaction(usdcTransaction)
+            }
+          }
           
           // Update donation status to confirmed
           setDonations(prev => prev.map(donation => 
@@ -292,6 +325,11 @@ export default function Home() {
             onDonate={handleDonate}
             isLoading={isLoading}
           />
+
+          {/* Spend Permissions Manager - Only show when connected */}
+          {isConnected && (
+            <SpendPermissionsManager />
+          )}
 
           {/* Wallet Connection Prompt Modal */}
           {showWalletPrompt && (

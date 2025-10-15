@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { initializeSDK } from '@/lib/baseAccountSDK'
 import { useReverseBaseName } from '@/hooks/useReverseBaseName'
+import { createSpendPermissionsManager, SpendPermissionData } from '@/lib/spendPermissions'
 
 interface BaseAccountState {
   isConnected: boolean
@@ -12,6 +13,8 @@ interface BaseAccountState {
   subAccountBaseName: string | null
   isLoading: boolean
   error: string | null
+  spendPermissions: SpendPermissionData[]
+  permissionsLoading: boolean
 }
 
 export function useBaseAccount() {
@@ -30,6 +33,8 @@ export function useBaseAccount() {
             subAccountBaseName: parsed.subAccountBaseName || null,
             isLoading: false,
             error: null,
+            spendPermissions: parsed.spendPermissions || [],
+            permissionsLoading: false,
           }
         }
       } catch (error) {
@@ -45,6 +50,8 @@ export function useBaseAccount() {
       subAccountBaseName: null,
       isLoading: false,
       error: null,
+      spendPermissions: [],
+      permissionsLoading: false,
     }
   })
 
@@ -61,12 +68,13 @@ export function useBaseAccount() {
           subAccountAddress: state.subAccountAddress,
           universalBaseName: state.universalBaseName,
           subAccountBaseName: state.subAccountBaseName,
+          spendPermissions: state.spendPermissions,
         }))
       } catch (error) {
         console.error('Failed to save wallet state:', error)
       }
     }
-  }, [state.isConnected, state.universalAddress, state.subAccountAddress, state.universalBaseName, state.subAccountBaseName])
+  }, [state.isConnected, state.universalAddress, state.subAccountAddress, state.universalBaseName, state.subAccountBaseName, state.spendPermissions])
 
   // Check if wallet is already connected on mount
   useEffect(() => {
@@ -201,6 +209,8 @@ export function useBaseAccount() {
       subAccountBaseName: null,
       isLoading: false,
       error: null,
+      spendPermissions: [],
+      permissionsLoading: false,
     })
     
     // Clear localStorage
@@ -259,10 +269,143 @@ export function useBaseAccount() {
     }
   }, [state.isConnected, state.universalAddress, state.subAccountAddress])
 
+  // Spend Permissions functions
+  const requestSpendPermission = useCallback(async (params: {
+    token: 'ETH' | 'USDC'
+    allowance: number
+    periodInDays: number
+  }) => {
+    if (!state.isConnected || !state.subAccountAddress) {
+      throw new Error('Wallet not connected')
+    }
+
+    const { provider } = await initializeSDK()
+    if (!provider) {
+      throw new Error('Provider not available')
+    }
+
+    // For now, we'll use the app's address as the spender
+    // In production, you'd want a dedicated spender account
+    const spenderAddress = state.subAccountAddress
+    
+    const spendPermissionsManager = createSpendPermissionsManager(provider, spenderAddress)
+    
+    try {
+      setState(prev => ({ ...prev, permissionsLoading: true }))
+      
+      const permission = await spendPermissionsManager.requestPermission({
+        account: state.subAccountAddress,
+        spender: spenderAddress,
+        token: params.token,
+        allowance: params.allowance,
+        periodInDays: params.periodInDays,
+        provider,
+      })
+
+      // Add the new permission to state
+      setState(prev => ({
+        ...prev,
+        spendPermissions: [...prev.spendPermissions, permission],
+        permissionsLoading: false,
+      }))
+
+      return permission
+    } catch (error) {
+      setState(prev => ({ ...prev, permissionsLoading: false }))
+      throw error
+    }
+  }, [state.isConnected, state.subAccountAddress])
+
+  const useSpendPermission = useCallback(async (params: {
+    permission: SpendPermissionData
+    amount?: number
+  }) => {
+    if (!state.isConnected) {
+      throw new Error('Wallet not connected')
+    }
+
+    const { provider } = await initializeSDK()
+    if (!provider) {
+      throw new Error('Provider not available')
+    }
+
+    const spenderAddress = state.subAccountAddress!
+    const spendPermissionsManager = createSpendPermissionsManager(provider, spenderAddress)
+    
+    return await spendPermissionsManager.usePermission({
+      permission: params.permission,
+      amount: params.amount,
+      provider,
+    })
+  }, [state.isConnected, state.subAccountAddress])
+
+  const fetchUserPermissions = useCallback(async () => {
+    if (!state.isConnected || !state.subAccountAddress) {
+      return []
+    }
+
+    const { provider } = await initializeSDK()
+    if (!provider) {
+      throw new Error('Provider not available')
+    }
+
+    const spenderAddress = state.subAccountAddress
+    const spendPermissionsManager = createSpendPermissionsManager(provider, spenderAddress)
+    
+    try {
+      setState(prev => ({ ...prev, permissionsLoading: true }))
+      
+      const permissions = await spendPermissionsManager.fetchUserPermissions(state.subAccountAddress)
+      
+      setState(prev => ({
+        ...prev,
+        spendPermissions: permissions,
+        permissionsLoading: false,
+      }))
+
+      return permissions
+    } catch (error) {
+      setState(prev => ({ ...prev, permissionsLoading: false }))
+      throw error
+    }
+  }, [state.isConnected, state.subAccountAddress])
+
+  const revokeSpendPermission = useCallback(async (permission: SpendPermissionData) => {
+    if (!state.isConnected) {
+      throw new Error('Wallet not connected')
+    }
+
+    const { provider } = await initializeSDK()
+    if (!provider) {
+      throw new Error('Provider not available')
+    }
+
+    const spenderAddress = state.subAccountAddress!
+    const spendPermissionsManager = createSpendPermissionsManager(provider, spenderAddress)
+    
+    try {
+      const hash = await spendPermissionsManager.requestRevokePermission(permission)
+      
+      // Remove the permission from state
+      setState(prev => ({
+        ...prev,
+        spendPermissions: prev.spendPermissions.filter(p => p.permissionHash !== permission.permissionHash),
+      }))
+
+      return hash
+    } catch (error) {
+      throw error
+    }
+  }, [state.isConnected, state.subAccountAddress])
+
   return {
     ...state,
     connectWallet,
     disconnectWallet,
     sendTransaction,
+    requestSpendPermission,
+    useSpendPermission,
+    fetchUserPermissions,
+    revokeSpendPermission,
   }
 }

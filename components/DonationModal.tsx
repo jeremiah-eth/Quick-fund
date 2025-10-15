@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { Heart, X, DollarSign, MessageSquare, ExternalLink, Copy, Check } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Heart, X, DollarSign, MessageSquare, ExternalLink, Copy, Check, Shield, AlertCircle } from 'lucide-react'
 import { Proposal, DonationData } from '@/types/expense'
 import { useBaseName } from '@/hooks/useBaseName'
+import { useBaseAccount } from '@/hooks/useBaseAccount'
+import { SpendPermissionData } from '@/lib/spendPermissions'
 
 interface DonationModalProps {
   proposal: Proposal
@@ -33,7 +35,29 @@ export default function DonationModal({
   const [customAmount, setCustomAmount] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [copied, setCopied] = useState(false)
+  const [showPermissionRequest, setShowPermissionRequest] = useState(false)
+  const [permissionRequested, setPermissionRequested] = useState(false)
+  const [permissionError, setPermissionError] = useState<string | null>(null)
+  
   const { resolveBaseName } = useBaseName()
+  const { 
+    spendPermissions, 
+    requestSpendPermission, 
+    useSpendPermission, 
+    permissionsLoading 
+  } = useBaseAccount()
+
+  // Check if user has existing spend permission for this currency
+  const existingPermission = spendPermissions.find(p => 
+    p.token === (proposal.currency === 'USDC' ? '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' : '0x0000000000000000000000000000000000000000')
+  )
+
+  // Check if we should request permission
+  useEffect(() => {
+    if (donationData.amount > 0 && !existingPermission && !permissionRequested) {
+      setShowPermissionRequest(true)
+    }
+  }, [donationData.amount, existingPermission, permissionRequested])
 
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
@@ -84,10 +108,43 @@ export default function DonationModal({
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleRequestPermission = async () => {
+    try {
+      setPermissionError(null)
+      await requestSpendPermission({
+        token: proposal.currency as 'ETH' | 'USDC',
+        allowance: Math.max(donationData.amount * 10, 1000), // 10x the amount or 1000 minimum
+        periodInDays: 30, // 30 days
+      })
+      setPermissionRequested(true)
+      setShowPermissionRequest(false)
+    } catch (error) {
+      console.error('Failed to request spend permission:', error)
+      setPermissionError(error instanceof Error ? error.message : 'Failed to request permission')
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (validateForm()) {
+    if (!validateForm()) return
+
+    // If user has spend permission, use it for seamless donation
+    if (existingPermission) {
+      try {
+        await useSpendPermission({
+          permission: existingPermission,
+          amount: donationData.amount,
+        })
+        // Still call onDonate to update the UI
+        onDonate(donationData)
+      } catch (error) {
+        console.error('Failed to use spend permission:', error)
+        // Fallback to regular donation flow
+        onDonate(donationData)
+      }
+    } else {
+      // Regular donation flow
       onDonate(donationData)
     }
   }
@@ -258,6 +315,52 @@ export default function DonationModal({
                     <span className="text-primary-700">Gas Fee:</span>
                     <span className="font-medium text-primary-900">~$0.01</span>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Spend Permission Request */}
+            {showPermissionRequest && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start space-x-3">
+                  <Shield className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h4 className="font-medium text-blue-900 mb-2">Enable Auto Donations</h4>
+                    <p className="text-sm text-blue-800 mb-3">
+                      Enable automatic donations for a smoother experience. You'll only need to approve once, 
+                      then all future donations will be processed automatically.
+                    </p>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={handleRequestPermission}
+                        disabled={permissionsLoading}
+                        className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {permissionsLoading ? 'Requesting...' : 'Enable Auto Donations'}
+                      </button>
+                      <button
+                        onClick={() => setShowPermissionRequest(false)}
+                        className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300"
+                      >
+                        Skip
+                      </button>
+                    </div>
+                    {permissionError && (
+                      <p className="text-xs text-red-600 mt-2">{permissionError}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Existing Permission Status */}
+            {existingPermission && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <Check className="w-4 h-4 text-green-600" />
+                  <span className="text-sm text-green-800">
+                    Auto donations enabled for {proposal.currency}
+                  </span>
                 </div>
               </div>
             )}
