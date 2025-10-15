@@ -95,7 +95,7 @@ INSERT INTO proposals (title, description, target_amount, currency, creator, cre
   'Create a platform where artists can showcase and sell their digital art as NFTs, with automatic royalty distribution.',
   5000.00,
   'USDC',
-  '0x1234567890123456789012345678901234567890',
+  '0xbE683CA5e8221950a8d8c5Dc5ffF448A550aa4Ea',
   'artist.base',
   'Art',
   'https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=400',
@@ -108,7 +108,7 @@ INSERT INTO proposals (title, description, target_amount, currency, creator, cre
   'Transform an empty lot into a thriving community garden with sustainable farming practices and educational programs.',
   2500.00,
   'USDC',
-  '0x0987654321098765432109876543210987654321',
+  '0xbE683CA5e8221950a8d8c5Dc5ffF448A550aa4Ea',
   'green.base',
   'Community',
   'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
@@ -121,3 +121,4 @@ INSERT INTO proposals (title, description, target_amount, currency, creator, cre
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+0xbE683CA5e8221950a8d8c5Dc5ffF448A550aa4Ea

@@ -1,5 +1,6 @@
-import { supabase } from './supabase'
+import { supabase, isSupabaseConfigured } from './supabase'
 import { Proposal, Donation, CreateProposalData, DonationData } from '@/types/expense'
+import { sharedDataAPI } from './sharedData'
 
 // Convert Supabase proposal to our Proposal type
 const convertSupabaseProposal = (row: any): Proposal => ({
@@ -64,6 +65,11 @@ const convertToSupabaseDonation = (donation: DonationData & { donorAddress: stri
 export const supabaseAPI = {
   // Get all proposals
   async getProposals(): Promise<Proposal[]> {
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('Supabase not configured, using mock API')
+      return sharedDataAPI.getProposals()
+    }
+
     const { data, error } = await supabase
       .from('proposals')
       .select('*')
@@ -79,6 +85,11 @@ export const supabaseAPI = {
 
   // Get all donations
   async getDonations(): Promise<Donation[]> {
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('Supabase not configured, using mock API')
+      return sharedDataAPI.getDonations()
+    }
+
     const { data, error } = await supabase
       .from('donations')
       .select('*')
@@ -110,6 +121,11 @@ export const supabaseAPI = {
 
   // Add a new proposal
   async addProposal(proposalData: CreateProposalData & { creator: string; creatorBaseName?: string }): Promise<Proposal> {
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('Supabase not configured, using mock API')
+      return sharedDataAPI.addProposal(proposalData)
+    }
+
     const supabaseData = convertToSupabaseProposal(proposalData)
     
     const { data, error } = await supabase
@@ -128,6 +144,11 @@ export const supabaseAPI = {
 
   // Add a new donation
   async addDonation(donationData: DonationData & { donorAddress: string; donorBaseName?: string }): Promise<Donation> {
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('Supabase not configured, using mock API')
+      return sharedDataAPI.addDonation(donationData)
+    }
+
     const supabaseData = convertToSupabaseDonation(donationData)
     
     const { data, error } = await supabase
