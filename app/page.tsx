@@ -146,20 +146,44 @@ export default function Home() {
       // Send transaction
       const proposal = proposals.find(p => p.id === data.proposalId)
       if (proposal) {
-        const transaction = {
-          to: proposal.creator,
-          value: data.currency === 'ETH' ? (data.amount * 1e18).toString() : '0',
-          from: 'sub' as const
+        try {
+          const transaction = {
+            to: proposal.creator,
+            value: data.currency === 'ETH' ? (data.amount * 1e18).toString() : '0',
+            from: 'sub' as const
+          }
+          
+          const txHash = await sendTransaction(transaction)
+          
+          // Update donation status to confirmed
+          setDonations(prev => prev.map(donation => 
+            donation.id === newDonation.id 
+              ? { ...donation, status: 'confirmed', transactionHash: txHash }
+              : donation
+          ))
+          
+          console.log('Donation transaction confirmed:', txHash)
+        } catch (txError) {
+          console.error('Transaction failed:', txError)
+          
+          // Update donation status to failed
+          setDonations(prev => prev.map(donation => 
+            donation.id === newDonation.id 
+              ? { ...donation, status: 'failed' }
+              : donation
+          ))
+          
+          // Revert the proposal funding update
+          setProposals(prev => prev.map(p => 
+            p.id === data.proposalId 
+              ? { ...p, currentFunding: p.currentFunding - data.amount }
+              : p
+          ))
+          
+          // Show user-friendly error message
+          alert('Transaction was rejected or failed. Donation not processed.')
+          return
         }
-        
-        await sendTransaction(transaction)
-        
-        // Update donation status
-        setDonations(prev => prev.map(donation => 
-          donation.id === newDonation.id 
-            ? { ...donation, status: 'confirmed', transactionHash: 'mock-hash' }
-            : donation
-        ))
       }
       
       console.log('Donation made:', newDonation)

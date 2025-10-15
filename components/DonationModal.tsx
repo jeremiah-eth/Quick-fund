@@ -11,6 +11,7 @@ interface DonationModalProps {
   onCancel: () => void
   isLoading?: boolean
   currentUserAddress?: string
+  transactionStatus?: 'pending' | 'confirmed' | 'failed' | null
 }
 
 const PRESET_AMOUNTS = [10, 25, 50, 100, 250, 500]
@@ -20,7 +21,8 @@ export default function DonationModal({
   onDonate, 
   onCancel, 
   isLoading = false,
-  currentUserAddress 
+  currentUserAddress,
+  transactionStatus = null
 }: DonationModalProps) {
   const [donationData, setDonationData] = useState<DonationData>({
     proposalId: proposal.id,
@@ -256,6 +258,34 @@ export default function DonationModal({
                     <span className="text-primary-700">Gas Fee:</span>
                     <span className="font-medium text-primary-900">~$0.01</span>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Transaction Status */}
+            {transactionStatus && (
+              <div className={`p-3 rounded-lg border ${
+                transactionStatus === 'confirmed' 
+                  ? 'bg-green-50 border-green-200 text-green-800'
+                  : transactionStatus === 'failed'
+                  ? 'bg-red-50 border-red-200 text-red-800'
+                  : 'bg-yellow-50 border-yellow-200 text-yellow-800'
+              }`}>
+                <div className="flex items-center">
+                  {transactionStatus === 'confirmed' && (
+                    <Check className="w-4 h-4 mr-2" />
+                  )}
+                  {transactionStatus === 'failed' && (
+                    <X className="w-4 h-4 mr-2" />
+                  )}
+                  {transactionStatus === 'pending' && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-600 mr-2"></div>
+                  )}
+                  <span className="text-sm font-medium">
+                    {transactionStatus === 'confirmed' && 'Transaction confirmed! Donation successful.'}
+                    {transactionStatus === 'failed' && 'Transaction failed. Please try again.'}
+                    {transactionStatus === 'pending' && 'Transaction pending... Please wait.'}
+                  </span>
                 </div>
               </div>
             )}
