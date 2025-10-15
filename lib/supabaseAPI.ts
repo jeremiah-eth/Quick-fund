@@ -105,6 +105,13 @@ export const supabaseAPI = {
 
   // Get donations for a specific proposal
   async getDonationsForProposal(proposalId: string): Promise<Donation[]> {
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('Supabase not configured, using mock API')
+      return sharedDataAPI.getDonations().then(donations => 
+        donations.filter(d => d.proposalId === proposalId)
+      )
+    }
+
     const { data, error } = await supabase
       .from('donations')
       .select('*')
@@ -170,6 +177,11 @@ export const supabaseAPI = {
 
   // Update proposal funding amount
   async updateProposalFunding(proposalId: string, additionalAmount: number): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('Supabase not configured, skipping funding update')
+      return
+    }
+
     // Get current proposal
     const { data: proposal, error: fetchError } = await supabase
       .from('proposals')
@@ -201,6 +213,11 @@ export const supabaseAPI = {
 
   // Update donation status
   async updateDonationStatus(donationId: string, status: 'pending' | 'confirmed' | 'failed', transactionHash?: string): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('Supabase not configured, skipping donation status update')
+      return
+    }
+
     const { error } = await supabase
       .from('donations')
       .update({ 
@@ -217,6 +234,11 @@ export const supabaseAPI = {
 
   // Subscribe to real-time updates for proposals
   subscribeToProposals(callback: (proposals: Proposal[]) => void) {
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('Supabase not configured, skipping real-time subscriptions')
+      return { unsubscribe: () => {} }
+    }
+
     return supabase
       .channel('proposals')
       .on('postgres_changes', 
@@ -231,6 +253,11 @@ export const supabaseAPI = {
 
   // Subscribe to real-time updates for donations
   subscribeToDonations(callback: (donations: Donation[]) => void) {
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('Supabase not configured, skipping real-time subscriptions')
+      return { unsubscribe: () => {} }
+    }
+
     return supabase
       .channel('donations')
       .on('postgres_changes', 
