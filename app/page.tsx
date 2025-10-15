@@ -7,7 +7,7 @@ import FundingDashboard from '@/components/FundingDashboard'
 import ClientOnly from '@/components/ClientOnly'
 import { Proposal, Donation, CreateProposalData, DonationData } from '@/types/expense'
 import { useBaseAccount } from '@/hooks/useBaseAccount'
-import { sharedDataAPI } from '@/lib/sharedData'
+import { supabaseAPI } from '@/lib/supabaseAPI'
 
 // Main page component with Base Account SDK integration
 export default function Home() {
@@ -26,31 +26,39 @@ export default function Home() {
     connectWallet,
   } = useBaseAccount()
 
-  // Load data from shared API on mount
+  // Load data from Supabase on mount
   useEffect(() => {
     const loadData = async () => {
       try {
         const [proposalsData, donationsData] = await Promise.all([
-          sharedDataAPI.getProposals(),
-          sharedDataAPI.getDonations()
+          supabaseAPI.getProposals(),
+          supabaseAPI.getDonations()
         ])
         
-        setProposals(proposalsData.map((p: any) => ({
-          ...p,
-          createdAt: new Date(p.createdAt),
-          deadline: p.deadline ? new Date(p.deadline) : undefined,
-        })))
-        
-        setDonations(donationsData.map((d: any) => ({
-          ...d,
-          createdAt: new Date(d.createdAt),
-        })))
+        setProposals(proposalsData)
+        setDonations(donationsData)
       } catch (error) {
         console.error('Failed to load data:', error)
       }
     }
     
     loadData()
+  }, [])
+
+  // Set up real-time subscriptions
+  useEffect(() => {
+    const proposalsSubscription = supabaseAPI.subscribeToProposals((newProposals) => {
+      setProposals(newProposals)
+    })
+
+    const donationsSubscription = supabaseAPI.subscribeToDonations((newDonations) => {
+      setDonations(newDonations)
+    })
+
+    return () => {
+      proposalsSubscription.unsubscribe()
+      donationsSubscription.unsubscribe()
+    }
   }, [])
 
   // Debug logging (only on client side)
@@ -86,7 +94,7 @@ export default function Home() {
         tags: data.tags
       }
 
-      const newProposal = await sharedDataAPI.addProposal(proposalData)
+      const newProposal = await supabaseAPI.addProposal(proposalData)
       setProposals(prev => [newProposal, ...prev])
       console.log('Proposal created:', newProposal)
       
@@ -118,7 +126,7 @@ export default function Home() {
         message: data.donorMessage
       }
 
-      const newDonation = await sharedDataAPI.addDonation(donationData)
+      const newDonation = await supabaseAPI.addDonation(donationData)
       
       // Update local state
       setDonations(prev => [newDonation, ...prev])
