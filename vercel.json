@@ -3,14 +3,5 @@
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
-  "outputDirectory": ".next",
-  "functions": {
-    "app/**/*.tsx": {
-      "runtime": "nodejs18.x"
-    }
-  },
-  "env": {
-    "NEXT_PUBLIC_APP_NAME": "Quick Fund",
-    "NEXT_PUBLIC_APP_DESCRIPTION": "Crowdfund projects with Base Account SDK and Auto Spend Permissions"
-  }
+  "outputDirectory": ".next"
 }
