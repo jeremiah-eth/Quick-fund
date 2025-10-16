@@ -148,7 +148,7 @@ export default function SpendPermissionsManager() {
                       <div>
                         <span className="font-medium">Period:</span>
                         <br />
-                        {Number(permission.period) / (24 * 60 * 60)} days
+                        {permission.periodInDays} days
                       </div>
                     </div>
 
