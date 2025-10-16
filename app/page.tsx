@@ -169,24 +169,18 @@ export default function Home() {
               recipient: proposal.creator, // Send to proposal creator's wallet
             })
           } else {
-            // Regular transaction flow
-            if (data.currency === 'ETH') {
-              // Send ETH directly
-              const transaction = {
-                to: proposal.creator,
-                value: (data.amount * 1e18).toString(), // Convert to wei
-                from: 'sub' as const
-              }
-              txHash = await sendTransaction(transaction)
-            } else {
-              // Send USDC token transfer
-              const usdcTransaction = createUSDCTransaction({
-                to: proposal.creator,
-                amount: data.amount,
-                from: 'sub'
-              })
-              txHash = await sendTransaction(usdcTransaction)
+            // Regular transaction flow - Only USDC supported
+            if (data.currency !== 'USDC') {
+              throw new Error('Only USDC donations are supported')
             }
+            
+            // Send USDC token transfer
+            const usdcTransaction = createUSDCTransaction({
+              to: proposal.creator,
+              amount: data.amount,
+              from: 'sub'
+            })
+            txHash = await sendTransaction(usdcTransaction)
           }
           
           // Update donation status to confirmed

@@ -112,7 +112,7 @@ export default function DonationModal({
     try {
       setPermissionError(null)
       await requestSpendPermission({
-        token: proposal.currency as 'ETH' | 'USDC',
+        token: 'USDC', // Only USDC supported
         allowance: Math.max(donationData.amount * 10, 1000), // 10x the amount or 1000 minimum
         periodInDays: 30, // 30 days
       })

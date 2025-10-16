@@ -294,7 +294,7 @@ export function useBaseAccount() {
 
   // Spend Permissions functions
   const requestSpendPermission = useCallback(async (params: {
-    token: 'ETH' | 'USDC'
+    token: 'USDC'
     allowance: number
     periodInDays: number
   }) => {

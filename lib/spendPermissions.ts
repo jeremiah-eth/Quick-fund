@@ -1,21 +1,12 @@
-import { 
+import {
+  requestSpendPermission,
   prepareSpendCallData,
   fetchPermissions,
-  fetchPermission,
   getPermissionStatus,
-  prepareRevokeCallData
-} from "@base-org/account/spend-permission"
-import { createBaseAccountSDK } from "@base-org/account"
+  requestRevoke,
+} from '@base-org/account/spend-permission'
+import { createBaseAccountSDK } from '@base-org/account'
 
-// USDC contract address on Base mainnet
-const USDC_CONTRACT_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
-
-// Native ETH address for Spend Permissions
-const NATIVE_TOKEN_ADDRESS = '0x0000000000000000000000000000000000000000'
-
-// Using Base Account SDK v2.0.0 with manual EIP-712 implementation for spend permissions
-
-// Interface for SDK interactions (what the Base Account SDK expects)
 export interface SpendPermission {
   account: string
   spender: string
@@ -26,7 +17,170 @@ export interface SpendPermission {
   signature?: string
 }
 
-// Interface for our internal data storage (includes additional metadata)
+export const USDC_BASE_ADDRESS = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'
+
+export async function requestUserSpendPermission(
+  userAccount: string,
+  spenderAccount: string,
+  dailyLimitUSD: number = 2
+): Promise<SpendPermission> {
+  try {
+    // Convert USD to USDC (6 decimals)
+    const allowanceUSDC = BigInt(dailyLimitUSD * 1_000_000)
+
+    const permission = await requestSpendPermission({
+      account: userAccount as `0x${string}`,
+      spender: spenderAccount as `0x${string}`,
+      token: USDC_BASE_ADDRESS as `0x${string}`,
+      chainId: 8453, // Base mainnet
+      allowance: allowanceUSDC,
+      periodInDays: 30, // 30 days for crowdfunding
+      provider: createBaseAccountSDK({
+        appName: "Quick Fund",
+      }).getProvider(),
+    })
+
+    return {
+      account: userAccount,
+      spender: spenderAccount,
+      token: USDC_BASE_ADDRESS,
+      chainId: 8453,
+      allowance: allowanceUSDC,
+      periodInDays: 30,
+      ...permission
+    }
+  } catch (error) {
+    console.error('Failed to request spend permission:', error)
+    throw new Error('Failed to request spend permission')
+  }
+}
+
+export async function getUserSpendPermissions(
+  userAccount: string,
+  spenderAccount: string
+) {
+  try {
+    console.log('🔧 Creating Base Account SDK...')
+    const sdk = createBaseAccountSDK({
+      appName: "Quick Fund",
+    })
+    const provider = sdk.getProvider()
+    console.log('✅ SDK and provider created')
+
+    console.log('📡 Calling fetchPermissions with:')
+    console.log('  - account:', userAccount)
+    console.log('  - chainId: 8453')
+    console.log('  - spender:', spenderAccount)
+    console.log('  - USDC_BASE_ADDRESS:', USDC_BASE_ADDRESS)
+
+    const permissions = await fetchPermissions({
+      account: userAccount as `0x${string}`,
+      chainId: 8453,
+      spender: spenderAccount as `0x${string}`,
+      provider,
+    })
+
+    console.log('📋 Raw fetchPermissions result:', permissions)
+    console.log('📊 Total permissions returned:', permissions.length)
+
+    // Log each permission before filtering
+    if (permissions.length > 0) {
+      permissions.forEach((permission, index) => {
+        const tokenAddress = permission.permission?.token?.toLowerCase()
+        const usdcAddress = USDC_BASE_ADDRESS.toLowerCase()
+        console.log(`🔍 Permission ${index + 1} before filtering:`, {
+          token: permission.permission?.token,
+          tokenLowercase: tokenAddress,
+          usdcLowercase: usdcAddress,
+          isUSDC: tokenAddress === usdcAddress,
+          allowance: permission.permission?.allowance?.toString(),
+          account: permission.permission?.account,
+          spender: permission.permission?.spender,
+        })
+      })
+    }
+
+    const filteredPermissions = permissions.filter(p => 
+      p.permission?.token?.toLowerCase() === USDC_BASE_ADDRESS.toLowerCase()
+    )
+    console.log('✅ Filtered USDC permissions:', filteredPermissions.length)
+
+    return filteredPermissions
+  } catch (error) {
+    console.error('❌ Failed to fetch spend permissions:', error)
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    return []
+  }
+}
+
+export async function checkSpendPermissionStatus(permission: any) {
+  try {
+    const status = await getPermissionStatus(permission)
+    return status
+  } catch (error) {
+    console.error('Failed to check permission status:', error)
+    return { isActive: false, remainingSpend: BigInt(0) }
+  }
+}
+
+export async function prepareSpendTransaction(
+  permission: any,
+  amountUSD: number
+) {
+  try {
+    // Convert USD to USDC (6 decimals)
+    const amountUSDC = BigInt(Math.floor(amountUSD * 1_000_000))
+
+    const spendCalls = await prepareSpendCallData(permission, amountUSDC)
+
+    return spendCalls
+  } catch (error) {
+    console.error('Failed to prepare spend transaction:', error)
+    throw new Error('Failed to prepare spend transaction')
+  }
+}
+
+export async function revokeSpendPermission(permission: any): Promise<string> {
+  try {
+    console.log('🔄 Revoking spend permission:', permission)
+    
+    // Ensure the permission object has the correct structure for requestRevoke
+    const normalizedPermission = {
+      permission: permission,
+      provider: createBaseAccountSDK({
+        appName: "Quick Fund",
+      }).getProvider(),
+    }
+    
+    console.log('🔧 Normalized permission for revoke:', normalizedPermission)
+    
+    // Use requestRevoke for user-initiated revoke (shows wallet popup)
+    const result = await requestRevoke(normalizedPermission)
+    
+    console.log('✅ Spend permission revoked successfully, result:', result)
+    console.log('🔍 Result type:', typeof result)
+    console.log('🔍 Result structure:', result)
+    
+    // requestRevoke returns an object with an 'id' property containing the transaction hash
+    const hash: string = (result as any).id
+    
+    console.log('✅ Final hash:', hash)
+    return hash
+  } catch (error) {
+    console.error('❌ Failed to revoke spend permission:', error)
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      permission: permission
+    })
+    throw new Error(`Failed to revoke spend permission: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
+}
+
+// Legacy interfaces for backward compatibility
 export interface SpendPermissionData {
   permissionHash: string
   account: string
@@ -34,7 +188,7 @@ export interface SpendPermissionData {
   token: string
   chainId: number
   allowance: bigint
-  periodInDays: number  // Store as days for consistency
+  periodInDays: number
   start: bigint
   end: bigint
   salt: bigint
@@ -46,7 +200,7 @@ export interface SpendPermissionData {
 export interface PermissionRequestParams {
   account: string
   spender: string
-  token: 'ETH' | 'USDC'
+  token: 'USDC'
   allowance: number
   periodInDays: number
   provider: any
@@ -59,6 +213,7 @@ export interface PermissionUsageParams {
   provider: any
 }
 
+// Legacy SpendPermissionsManager class for backward compatibility
 export class SpendPermissionsManager {
   private provider: any
   private spenderAddress: string
@@ -68,97 +223,37 @@ export class SpendPermissionsManager {
     this.spenderAddress = spenderAddress
   }
 
-  /**
-   * Request a new Spend Permission from a user
-   * Uses Base Account SDK with Sub Accounts for Auto Spend Permissions
-   */
   async requestPermission(params: PermissionRequestParams): Promise<SpendPermissionData> {
-    const tokenAddress = params.token === 'USDC' ? USDC_CONTRACT_ADDRESS : NATIVE_TOKEN_ADDRESS
-    
     try {
-      // Create Base Account SDK instance for Sub Account integration
-      const sdk = createBaseAccountSDK({
-        appName: 'Quick Fund',
-        appLogoUrl: 'https://quick-fund-nine.vercel.app/logo.png',
-        appChainIds: [8453], // Base mainnet
-      })
-
-      // Manual EIP-712 implementation since requestSpendPermission is not exported
-      const now = Math.floor(Date.now() / 1000)
-      const endTime = now + (params.periodInDays * 24 * 60 * 60)
-      const salt = Math.floor(Math.random() * 1000000)
-
-      const message = {
-        account: params.account,
-        spender: params.spender,
-        token: tokenAddress,
-        allowance: BigInt(params.allowance * (params.token === 'USDC' ? 1e6 : 1e18)),
-        period: BigInt(params.periodInDays * 24 * 60 * 60),
-        start: BigInt(now),
-        end: BigInt(endTime),
-        salt: BigInt(salt),
-        extraData: '0x'
+      // Only support USDC
+      if (params.token !== 'USDC') {
+        throw new Error('Only USDC tokens are supported')
       }
 
-      // Request signature from the user's Universal Account using EIP-712
-      const signature = await this.provider.request({
-        method: 'eth_signTypedData_v4',
-        params: [params.account, JSON.stringify({
-          domain: {
-            name: 'SpendPermission',
-            version: '1',
-            chainId: 8453, // Base mainnet
-            verifyingContract: '0x0000000000000000000000000000000000000000'
-          },
-          types: {
-            SpendPermission: [
-              { name: 'account', type: 'address' },
-              { name: 'spender', type: 'address' },
-              { name: 'token', type: 'address' },
-              { name: 'allowance', type: 'uint160' },
-              { name: 'period', type: 'uint48' },
-              { name: 'start', type: 'uint48' },
-              { name: 'end', type: 'uint48' },
-              { name: 'salt', type: 'uint256' },
-              { name: 'extraData', type: 'bytes' }
-            ]
-          },
-          primaryType: 'SpendPermission',
-          message
-        })]
-      })
+      const permission = await requestUserSpendPermission(
+        params.account,
+        params.spender,
+        params.allowance
+      )
 
-      // Create the permission object
-      const permission = {
-        account: params.account,
-        spender: params.spender,
-        token: tokenAddress,
-        chainId: 8453,
-        allowance: message.allowance,
-        periodInDays: params.periodInDays,
-        signature: signature,
-        permission: message
-      }
-
-      // Convert the SDK response to our SpendPermissionData format
-      const permissionAny = permission as any
+      // Convert to our SpendPermissionData format
       const spendPermissionData: SpendPermissionData = {
-        permissionHash: permissionAny.permissionHash || `0x${Math.random().toString(16).substr(2, 64)}`,
-        account: permissionAny.account || params.account,
-        spender: permissionAny.spender || params.spender,
-        token: permissionAny.token || tokenAddress,
-        chainId: 8453, // Base mainnet
-        allowance: permissionAny.allowance || BigInt(params.allowance * (params.token === 'USDC' ? 1e6 : 1e18)),
-        periodInDays: permissionAny.periodInDays || params.periodInDays,
-        start: permissionAny.start || BigInt(Math.floor(Date.now() / 1000)),
-        end: permissionAny.end || BigInt(Math.floor(Date.now() / 1000) + (params.periodInDays * 24 * 60 * 60)),
-        salt: permissionAny.salt || BigInt(Math.floor(Math.random() * 1000000)),
-        extraData: permissionAny.extraData || '0x',
-        signature: permissionAny.signature,
+        permissionHash: `0x${Math.random().toString(16).substr(2, 64)}`,
+        account: permission.account,
+        spender: permission.spender,
+        token: permission.token,
+        chainId: permission.chainId,
+        allowance: permission.allowance,
+        periodInDays: permission.periodInDays,
+        start: BigInt(Math.floor(Date.now() / 1000)),
+        end: BigInt(Math.floor(Date.now() / 1000) + (permission.periodInDays * 24 * 60 * 60)),
+        salt: BigInt(Math.floor(Math.random() * 1000000)),
+        extraData: '0x',
+        signature: permission.signature,
         permission: permission
       }
 
-      console.log('Created Spend Permission with Base Account SDK:', { 
+      console.log('Created USDC Spend Permission with Base Account SDK:', { 
         spendPermissionData,
         universalAccount: params.account,
         subAccount: params.spender
@@ -170,36 +265,12 @@ export class SpendPermissionsManager {
     }
   }
 
-
-  /**
-   * Check if a permission exists and is active
-   */
   async checkPermissionStatus(permission: SpendPermissionData): Promise<{
     isActive: boolean
     remainingSpend: bigint
   }> {
     try {
-      // Convert our permission format to the format expected by getPermissionStatus
-      // The SDK expects string values for BigInt fields, not actual BigInt objects
-      const spendPermission = {
-        ...permission,
-        allowance: permission.allowance.toString(),
-        periodInDays: permission.periodInDays,
-        start: permission.start.toString(),
-        end: permission.end.toString(),
-        salt: permission.salt.toString(),
-        signature: '0x', // Mock signature for demo
-        permission: {
-          ...permission,
-          allowance: permission.allowance.toString(),
-          periodInDays: permission.periodInDays,
-          start: permission.start.toString(),
-          end: permission.end.toString(),
-          salt: permission.salt.toString(),
-        }, // The permission object itself with string values
-      }
-      
-      const status = await getPermissionStatus(spendPermission as any)
+      const status = await checkSpendPermissionStatus(permission)
       return status
     } catch (error) {
       console.error('Failed to check permission status:', error)
@@ -211,60 +282,12 @@ export class SpendPermissionsManager {
     }
   }
 
-  /**
-   * Use an existing Spend Permission to make a transaction
-   * Uses Base Account SDK with Sub Accounts for seamless transactions
-   */
   async usePermission(params: PermissionUsageParams): Promise<string> {
     const { permission, amount, recipient } = params
-    
-    // Check if permission is still active
-    const { isActive, remainingSpend } = await this.checkPermissionStatus(permission)
-    
-    if (!isActive) {
-      throw new Error('Spend permission is not active')
-    }
-
-    if (amount && remainingSpend < BigInt(amount * 1e6)) { // USDC has 6 decimals
-      throw new Error('Insufficient remaining allowance')
-    }
 
     try {
-      // Create Base Account SDK instance for Sub Account integration
-      const sdk = createBaseAccountSDK({
-        appName: 'Quick Fund',
-        appLogoUrl: 'https://quick-fund-nine.vercel.app/logo.png',
-        appChainIds: [8453], // Base mainnet
-      })
-
-      // Get the Sub Account from the SDK
-      const subAccount = sdk.subAccount.get()
-
-      // Convert our permission format to the format expected by prepareSpendCallData
-      // The SDK expects string values for BigInt fields, not actual BigInt objects
-      const spendPermission = {
-        ...permission,
-        allowance: permission.allowance.toString(),
-        periodInDays: permission.periodInDays,
-        start: permission.start.toString(),
-        end: permission.end.toString(),
-        salt: permission.salt.toString(),
-        signature: '0x', // Mock signature for demo
-        permission: {
-          ...permission,
-          allowance: permission.allowance.toString(),
-          periodInDays: permission.periodInDays,
-          start: permission.start.toString(),
-          end: permission.end.toString(),
-          salt: permission.salt.toString(),
-        }, // The permission object itself with string values
-      }
-
-      // Prepare the spend calls using the Sub Account
-      const spendCalls = await prepareSpendCallData(
-        spendPermission as any,
-        amount ? BigInt(Math.floor(amount * 1e6)) : "max-remaining-allowance" // USDC has 6 decimals
-      )
+      // Use the working prepareSpendTransaction function
+      const spendCalls = await prepareSpendTransaction(permission, amount || 0)
 
       // If we have a recipient address, we need to modify the calls to send to that address
       // This is a simplified implementation - in production you'd need to properly construct
@@ -299,37 +322,27 @@ export class SpendPermissionsManager {
       return callsId
     } catch (error) {
       console.error('Failed to use spend permission:', error)
-      // Fallback to mock transaction for demo purposes
-      const mockTxHash = `0x${Math.random().toString(16).substr(2, 64)}`
-      console.log('Mock transaction hash for recipient:', recipient)
-      return mockTxHash
+      throw error
     }
   }
 
-  /**
-   * Fetch all permissions for a user
-   */
   async fetchUserPermissions(account: string): Promise<SpendPermissionData[]> {
     try {
-      const permissions = await fetchPermissions({
-        account,
-        chainId: 8453,
-        spender: this.spenderAddress,
-        provider: this.provider,
-      })
-
+      const permissions = await getUserSpendPermissions(account, this.spenderAddress)
+      
+      // Convert to SpendPermissionData format
       return permissions.map((permission: any) => ({
         permissionHash: permission.permissionHash || `0x${Math.random().toString(16).substr(2, 64)}`,
-        account: permission.account || account,
-        spender: permission.spender || this.spenderAddress,
-        token: permission.token || '0x0000000000000000000000000000000000000000',
-        chainId: 8453, // Base mainnet
-        allowance: permission.allowance || BigInt(0),
-        periodInDays: permission.periodInDays || 30, // Default to 30 days
-        start: permission.start || BigInt(0),
-        end: permission.end || BigInt(0),
-        salt: permission.salt || BigInt(0),
-        extraData: permission.extraData || '0x',
+        account: permission.permission?.account || account,
+        spender: permission.permission?.spender || this.spenderAddress,
+        token: permission.permission?.token || USDC_BASE_ADDRESS,
+        chainId: 8453,
+        allowance: permission.permission?.allowance || BigInt(0),
+        periodInDays: 30, // Default to 30 days
+        start: permission.permission?.start || BigInt(0),
+        end: permission.permission?.end || BigInt(0),
+        salt: permission.permission?.salt || BigInt(0),
+        extraData: permission.permission?.extraData || '0x',
       }))
     } catch (error) {
       console.error('Failed to fetch permissions:', error)
@@ -337,129 +350,33 @@ export class SpendPermissionsManager {
     }
   }
 
-  /**
-   * Fetch a specific permission by hash
-   */
   async fetchPermissionByHash(permissionHash: string): Promise<SpendPermissionData | null> {
     try {
-      const permission = await fetchPermission({
-        permissionHash,
-        provider: this.provider,
-      })
-
-      if (!permission) {
-        return null
-      }
-
-      return {
-        permissionHash: permission.permissionHash || permissionHash,
-        account: (permission as any).account || '',
-        spender: (permission as any).spender || this.spenderAddress,
-        token: (permission as any).token || '0x0000000000000000000000000000000000000000',
-        chainId: 8453, // Base mainnet
-        allowance: (permission as any).allowance || BigInt(0),
-        periodInDays: (permission as any).periodInDays || 30, // Default to 30 days
-        start: (permission as any).start || BigInt(0),
-        end: (permission as any).end || BigInt(0),
-        salt: (permission as any).salt || BigInt(0),
-        extraData: (permission as any).extraData || '0x',
-      }
+      // This would need to be implemented based on your specific needs
+      // For now, return null as we don't have a direct hash lookup
+      return null
     } catch (error) {
       console.error('Failed to fetch permission:', error)
       return null
     }
   }
 
-  /**
-   * Request user to revoke a permission
-   * Uses manual EIP-712 implementation
-   */
   async requestRevokePermission(permission: SpendPermissionData): Promise<string> {
     try {
-      // Create Base Account SDK instance
-      const sdk = createBaseAccountSDK({
-        appName: 'Quick Fund',
-        appLogoUrl: 'https://quick-fund-nine.vercel.app/logo.png',
-        appChainIds: [8453], // Base mainnet
-      })
-
-      // Normalize the permission object for requestRevoke
-      const normalizedPermission = {
-        permission: permission.permission || permission,
-        provider: sdk.getProvider(),
-      }
-
-      console.log('🔄 Revoking spend permission:', permission)
-      
-      // Manual EIP-712 implementation for revoke since requestRevoke is not available
-      const revokeMessage = {
-        permissionHash: permission.permissionHash,
-        account: permission.account
-      }
-
-      const signature = await this.provider.request({
-        method: 'eth_signTypedData_v4',
-        params: [permission.account, JSON.stringify({
-          domain: {
-            name: 'SpendPermission',
-            version: '1',
-            chainId: 8453, // Base mainnet
-            verifyingContract: '0x0000000000000000000000000000000000000000'
-          },
-          types: {
-            RevokeSpendPermission: [
-              { name: 'permissionHash', type: 'bytes32' },
-              { name: 'account', type: 'address' }
-            ]
-          },
-          primaryType: 'RevokeSpendPermission',
-          message: revokeMessage
-        })]
-      })
-
-      // For now, return a mock transaction hash
-      // In production, you would submit this signature to the contract
-      const result = { id: `0x${Math.random().toString(16).substr(2, 64)}` }
-      
-      console.log('✅ Spend permission revoked successfully, result:', result)
-      
-      // requestRevoke returns an object with an 'id' property containing the transaction hash
-      const hash: string = (result as any).id
-      
-      console.log('✅ Final hash:', hash)
+      const hash = await revokeSpendPermission(permission)
       return hash
     } catch (error) {
-      console.error('❌ Failed to revoke spend permission:', error)
+      console.error('Failed to revoke permission:', error)
       throw error
     }
   }
 
-  /**
-   * Revoke a permission silently (from spender account)
-   */
   async revokePermissionSilently(permission: SpendPermissionData): Promise<string> {
     try {
-      // Convert our permission format to the format expected by prepareRevokeCallData
-      const spendPermission = {
-        ...permission,
-        signature: '0x', // Mock signature for demo
-        permission: permission, // The permission object itself
-      }
-
-      const revokeCall = await prepareRevokeCallData(spendPermission as any)
-
-      const callsId = await this.provider.request({
-        method: "wallet_sendCalls",
-        params: [{
-          version: "2.0",
-          chainId: 8453, // Base mainnet chain ID
-          atomicRequired: true,
-          from: this.spenderAddress,
-          calls: [revokeCall],
-        }],
-      })
-
-      return callsId
+      // For silent revoke, we could implement a different approach
+      // For now, use the same revoke function
+      const hash = await revokeSpendPermission(permission)
+      return hash
     } catch (error) {
       console.error('Failed to revoke permission silently:', error)
       throw error
@@ -467,18 +384,7 @@ export class SpendPermissionsManager {
   }
 }
 
-// Helper function to create a SpendPermissionsManager instance
+// Factory function for creating SpendPermissionsManager
 export function createSpendPermissionsManager(provider: any, spenderAddress: string): SpendPermissionsManager {
   return new SpendPermissionsManager(provider, spenderAddress)
-}
-
-// Helper function to get token address
-export function getTokenAddress(token: 'ETH' | 'USDC'): string {
-  return token === 'USDC' ? USDC_CONTRACT_ADDRESS : NATIVE_TOKEN_ADDRESS
-}
-
-// Helper function to convert amount to proper decimals
-export function convertToTokenDecimals(amount: number, token: 'ETH' | 'USDC'): bigint {
-  const decimals = token === 'USDC' ? 6 : 18
-  return BigInt(amount * Math.pow(10, decimals))
 }
