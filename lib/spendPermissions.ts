@@ -22,6 +22,7 @@ export interface SpendPermissionData {
   account: string
   spender: string
   token: string
+  chainId: number
   allowance: bigint
   period: bigint
   start: bigint
@@ -90,6 +91,7 @@ export class SpendPermissionsManager {
         account: permissionAny.account || params.account,
         spender: permissionAny.spender || params.spender,
         token: permissionAny.token || tokenAddress,
+        chainId: 8453, // Base mainnet
         allowance: permissionAny.allowance || BigInt(params.allowance * (params.token === 'USDC' ? 1e6 : 1e18)),
         period: permissionAny.period || BigInt(params.periodInDays * 24 * 60 * 60),
         start: permissionAny.start || BigInt(Math.floor(Date.now() / 1000)),
@@ -238,6 +240,7 @@ export class SpendPermissionsManager {
         account: permission.account || account,
         spender: permission.spender || this.spenderAddress,
         token: permission.token || '0x0000000000000000000000000000000000000000',
+        chainId: 8453, // Base mainnet
         allowance: permission.allowance || BigInt(0),
         period: permission.period || BigInt(0),
         start: permission.start || BigInt(0),
@@ -270,6 +273,7 @@ export class SpendPermissionsManager {
         account: (permission as any).account || '',
         spender: (permission as any).spender || this.spenderAddress,
         token: (permission as any).token || '0x0000000000000000000000000000000000000000',
+        chainId: 8453, // Base mainnet
         allowance: (permission as any).allowance || BigInt(0),
         period: (permission as any).period || BigInt(0),
         start: (permission as any).start || BigInt(0),

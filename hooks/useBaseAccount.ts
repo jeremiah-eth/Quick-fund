@@ -5,6 +5,30 @@ import { initializeSDK } from '@/lib/baseAccountSDK'
 import { useReverseBaseName } from '@/hooks/useReverseBaseName'
 import { createSpendPermissionsManager, SpendPermissionData } from '@/lib/spendPermissions'
 
+// Helper functions to handle BigInt serialization
+function serializeSpendPermissions(permissions: SpendPermissionData[]): any[] {
+  return permissions.map(permission => ({
+    ...permission,
+    allowance: permission.allowance.toString(),
+    period: permission.period.toString(),
+    start: permission.start.toString(),
+    end: permission.end.toString(),
+    salt: permission.salt.toString(),
+  }))
+}
+
+function deserializeSpendPermissions(permissions: any[]): SpendPermissionData[] {
+  return permissions.map(permission => ({
+    ...permission,
+    chainId: permission.chainId || 8453, // Default to Base mainnet
+    allowance: BigInt(permission.allowance || '0'),
+    period: BigInt(permission.period || '0'),
+    start: BigInt(permission.start || '0'),
+    end: BigInt(permission.end || '0'),
+    salt: BigInt(permission.salt || '0'),
+  }))
+}
+
 interface BaseAccountState {
   isConnected: boolean
   universalAddress: string | null
@@ -33,7 +57,7 @@ export function useBaseAccount() {
             subAccountBaseName: parsed.subAccountBaseName || null,
             isLoading: false,
             error: null,
-            spendPermissions: parsed.spendPermissions || [],
+            spendPermissions: parsed.spendPermissions ? deserializeSpendPermissions(parsed.spendPermissions) : [],
             permissionsLoading: false,
           }
         }
@@ -68,7 +92,7 @@ export function useBaseAccount() {
           subAccountAddress: state.subAccountAddress,
           universalBaseName: state.universalBaseName,
           subAccountBaseName: state.subAccountBaseName,
-          spendPermissions: state.spendPermissions,
+          spendPermissions: serializeSpendPermissions(state.spendPermissions),
         }))
       } catch (error) {
         console.error('Failed to save wallet state:', error)
