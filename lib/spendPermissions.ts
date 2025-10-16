@@ -116,9 +116,24 @@ export async function getUserSpendPermissions(
   }
 }
 
-export async function checkSpendPermissionStatus(permission: any) {
+export async function checkSpendPermissionStatus(permission: SpendPermissionData) {
   try {
-    const status = await getPermissionStatus(permission)
+    // The SDK expects the permission object, not the SpendPermissionData wrapper
+    const sdkPermission = permission.permission || {
+      account: permission.account,
+      spender: permission.spender,
+      token: permission.token,
+      chainId: permission.chainId,
+      allowance: permission.allowance,
+      period: BigInt(permission.periodInDays * 24 * 60 * 60), // Convert days to seconds
+      start: permission.start,
+      end: permission.end,
+      salt: permission.salt,
+      extraData: permission.extraData,
+      signature: permission.signature
+    }
+
+    const status = await getPermissionStatus(sdkPermission)
     return status
   } catch (error) {
     console.error('Failed to check permission status:', error)
@@ -127,18 +142,36 @@ export async function checkSpendPermissionStatus(permission: any) {
 }
 
 export async function prepareSpendTransaction(
-  permission: any,
+  permission: SpendPermissionData,
   amountUSD: number
 ) {
   try {
     // Convert USD to USDC (6 decimals)
     const amountUSDC = BigInt(Math.floor(amountUSD * 1_000_000))
 
-    const spendCalls = await prepareSpendCallData(permission, amountUSDC)
+    // The SDK expects the permission object, not the SpendPermissionData wrapper
+    const sdkPermission = permission.permission || {
+      account: permission.account,
+      spender: permission.spender,
+      token: permission.token,
+      chainId: permission.chainId,
+      allowance: permission.allowance,
+      period: BigInt(permission.periodInDays * 24 * 60 * 60), // Convert days to seconds
+      start: permission.start,
+      end: permission.end,
+      salt: permission.salt,
+      extraData: permission.extraData,
+      signature: permission.signature
+    }
+
+    console.log('🔧 Using SDK permission object:', sdkPermission)
+
+    const spendCalls = await prepareSpendCallData(sdkPermission, amountUSDC)
 
     return spendCalls
   } catch (error) {
     console.error('Failed to prepare spend transaction:', error)
+    console.error('Permission object:', permission)
     throw new Error('Failed to prepare spend transaction')
   }
 }
