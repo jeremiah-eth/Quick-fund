@@ -288,7 +288,7 @@ export function useBaseAccount() {
     // In production, you'd want a dedicated spender account
     const spenderAddress = state.subAccountAddress
     
-           const spendPermissionsManager = createSpendPermissionsManager(provider, spenderAddress, process.env.NEXT_PUBLIC_CDP_API_KEY)
+           const spendPermissionsManager = createSpendPermissionsManager(provider, spenderAddress)
     
     try {
       setState(prev => ({ ...prev, permissionsLoading: true }))
@@ -319,6 +319,7 @@ export function useBaseAccount() {
   const useSpendPermission = useCallback(async (params: {
     permission: SpendPermissionData
     amount?: number
+    recipient?: string
   }) => {
     if (!state.isConnected) {
       throw new Error('Wallet not connected')
@@ -330,13 +331,14 @@ export function useBaseAccount() {
     }
 
     const spenderAddress = state.subAccountAddress!
-           const spendPermissionsManager = createSpendPermissionsManager(provider, spenderAddress, process.env.NEXT_PUBLIC_CDP_API_KEY)
+           const spendPermissionsManager = createSpendPermissionsManager(provider, spenderAddress)
     
-    return await spendPermissionsManager.usePermission({
-      permission: params.permission,
-      amount: params.amount,
-      provider,
-    })
+      return await spendPermissionsManager.usePermission({
+        permission: params.permission,
+        amount: params.amount,
+        recipient: params.recipient,
+        provider,
+      })
   }, [state.isConnected, state.subAccountAddress])
 
   const fetchUserPermissions = useCallback(async () => {
@@ -350,7 +352,7 @@ export function useBaseAccount() {
     }
 
     const spenderAddress = state.subAccountAddress
-           const spendPermissionsManager = createSpendPermissionsManager(provider, spenderAddress, process.env.NEXT_PUBLIC_CDP_API_KEY)
+           const spendPermissionsManager = createSpendPermissionsManager(provider, spenderAddress)
     
     try {
       setState(prev => ({ ...prev, permissionsLoading: true }))
@@ -381,7 +383,7 @@ export function useBaseAccount() {
     }
 
     const spenderAddress = state.subAccountAddress!
-           const spendPermissionsManager = createSpendPermissionsManager(provider, spenderAddress, process.env.NEXT_PUBLIC_CDP_API_KEY)
+           const spendPermissionsManager = createSpendPermissionsManager(provider, spenderAddress)
     
     try {
       const hash = await spendPermissionsManager.requestRevokePermission(permission)

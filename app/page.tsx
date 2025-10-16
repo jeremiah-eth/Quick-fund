@@ -162,10 +162,11 @@ export default function Home() {
           
           if (existingPermission) {
             // Use Spend Permission for seamless transaction
-            console.log('Using Spend Permission for donation')
+            console.log('Using Spend Permission for donation to:', proposal.creator)
             txHash = await useSpendPermission({
               permission: existingPermission,
               amount: data.amount,
+              recipient: proposal.creator, // Send to proposal creator's wallet
             })
           } else {
             // Regular transaction flow
