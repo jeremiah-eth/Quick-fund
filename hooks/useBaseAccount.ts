@@ -10,7 +10,6 @@ function serializeSpendPermissions(permissions: SpendPermissionData[]): any[] {
   return permissions.map(permission => ({
     ...permission,
     allowance: permission.allowance.toString(),
-    period: permission.period.toString(),
     start: permission.start.toString(),
     end: permission.end.toString(),
     salt: permission.salt.toString(),
@@ -22,7 +21,7 @@ function deserializeSpendPermissions(permissions: any[]): SpendPermissionData[] 
     ...permission,
     chainId: permission.chainId || 8453, // Default to Base mainnet
     allowance: BigInt(permission.allowance || '0'),
-    period: BigInt(permission.period || '0'),
+    periodInDays: permission.periodInDays || 30, // Default to 30 days
     start: BigInt(permission.start || '0'),
     end: BigInt(permission.end || '0'),
     salt: BigInt(permission.salt || '0'),

@@ -17,6 +17,18 @@ const NATIVE_TOKEN_ADDRESS = '0x0000000000000000000000000000000000000000'
 
 // Using Base Account SDK v2.0.0 with real requestSpendPermission and requestRevoke functions
 
+// Interface for SDK interactions (what the Base Account SDK expects)
+export interface SpendPermission {
+  account: string
+  spender: string
+  token: string
+  chainId: number
+  allowance: bigint
+  periodInDays: number
+  signature?: string
+}
+
+// Interface for our internal data storage (includes additional metadata)
 export interface SpendPermissionData {
   permissionHash: string
   account: string
@@ -24,7 +36,7 @@ export interface SpendPermissionData {
   token: string
   chainId: number
   allowance: bigint
-  period: bigint
+  periodInDays: number  // Store as days for consistency
   start: bigint
   end: bigint
   salt: bigint
@@ -93,7 +105,7 @@ export class SpendPermissionsManager {
         token: permissionAny.token || tokenAddress,
         chainId: 8453, // Base mainnet
         allowance: permissionAny.allowance || BigInt(params.allowance * (params.token === 'USDC' ? 1e6 : 1e18)),
-        period: permissionAny.period || BigInt(params.periodInDays * 24 * 60 * 60),
+        periodInDays: permissionAny.periodInDays || params.periodInDays,
         start: permissionAny.start || BigInt(Math.floor(Date.now() / 1000)),
         end: permissionAny.end || BigInt(Math.floor(Date.now() / 1000) + (params.periodInDays * 24 * 60 * 60)),
         salt: permissionAny.salt || BigInt(Math.floor(Math.random() * 1000000)),
@@ -124,10 +136,23 @@ export class SpendPermissionsManager {
   }> {
     try {
       // Convert our permission format to the format expected by getPermissionStatus
+      // The SDK expects string values for BigInt fields, not actual BigInt objects
       const spendPermission = {
         ...permission,
+        allowance: permission.allowance.toString(),
+        periodInDays: permission.periodInDays,
+        start: permission.start.toString(),
+        end: permission.end.toString(),
+        salt: permission.salt.toString(),
         signature: '0x', // Mock signature for demo
-        permission: permission, // The permission object itself
+        permission: {
+          ...permission,
+          allowance: permission.allowance.toString(),
+          periodInDays: permission.periodInDays,
+          start: permission.start.toString(),
+          end: permission.end.toString(),
+          salt: permission.salt.toString(),
+        }, // The permission object itself with string values
       }
       
       const status = await getPermissionStatus(spendPermission as any)
@@ -172,16 +197,29 @@ export class SpendPermissionsManager {
       const subAccount = sdk.subAccount.get()
 
       // Convert our permission format to the format expected by prepareSpendCallData
+      // The SDK expects string values for BigInt fields, not actual BigInt objects
       const spendPermission = {
         ...permission,
+        allowance: permission.allowance.toString(),
+        periodInDays: permission.periodInDays,
+        start: permission.start.toString(),
+        end: permission.end.toString(),
+        salt: permission.salt.toString(),
         signature: '0x', // Mock signature for demo
-        permission: permission, // The permission object itself
+        permission: {
+          ...permission,
+          allowance: permission.allowance.toString(),
+          periodInDays: permission.periodInDays,
+          start: permission.start.toString(),
+          end: permission.end.toString(),
+          salt: permission.salt.toString(),
+        }, // The permission object itself with string values
       }
 
       // Prepare the spend calls using the Sub Account
       const spendCalls = await prepareSpendCallData(
         spendPermission as any,
-        amount ? BigInt(amount * 1e6) : "max-remaining-allowance" // USDC has 6 decimals
+        amount ? BigInt(Math.floor(amount * 1e6)) : "max-remaining-allowance" // USDC has 6 decimals
       )
 
       // If we have a recipient address, we need to modify the calls to send to that address
@@ -200,6 +238,7 @@ export class SpendPermissionsManager {
         method: "wallet_sendCalls",
         params: [{
           version: "2.0",
+          chainId: 8453, // Base mainnet chain ID
           atomicRequired: true,
           from: this.spenderAddress, // Sub Account address
           calls: finalCalls,
@@ -242,7 +281,7 @@ export class SpendPermissionsManager {
         token: permission.token || '0x0000000000000000000000000000000000000000',
         chainId: 8453, // Base mainnet
         allowance: permission.allowance || BigInt(0),
-        period: permission.period || BigInt(0),
+        periodInDays: permission.periodInDays || 30, // Default to 30 days
         start: permission.start || BigInt(0),
         end: permission.end || BigInt(0),
         salt: permission.salt || BigInt(0),
@@ -275,7 +314,7 @@ export class SpendPermissionsManager {
         token: (permission as any).token || '0x0000000000000000000000000000000000000000',
         chainId: 8453, // Base mainnet
         allowance: (permission as any).allowance || BigInt(0),
-        period: (permission as any).period || BigInt(0),
+        periodInDays: (permission as any).periodInDays || 30, // Default to 30 days
         start: (permission as any).start || BigInt(0),
         end: (permission as any).end || BigInt(0),
         salt: (permission as any).salt || BigInt(0),
@@ -342,6 +381,7 @@ export class SpendPermissionsManager {
         method: "wallet_sendCalls",
         params: [{
           version: "2.0",
+          chainId: 8453, // Base mainnet chain ID
           atomicRequired: true,
           from: this.spenderAddress,
           calls: [revokeCall],
