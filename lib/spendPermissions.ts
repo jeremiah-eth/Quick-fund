@@ -1,8 +1,10 @@
 import { 
+  requestSpendPermission,
   prepareSpendCallData,
   fetchPermissions,
   fetchPermission,
   getPermissionStatus,
+  requestRevoke,
   prepareRevokeCallData
 } from "@base-org/account/spend-permission"
 import { createBaseAccountSDK } from "@base-org/account"
@@ -13,7 +15,7 @@ const USDC_CONTRACT_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 // Native ETH address for Spend Permissions
 const NATIVE_TOKEN_ADDRESS = '0x0000000000000000000000000000000000000000'
 
-// Note: CDP API integration removed - using direct EIP-712 signature flow
+// Using Base Account SDK v2.0.0 with real requestSpendPermission and requestRevoke functions
 
 export interface SpendPermissionData {
   permissionHash: string
@@ -26,6 +28,8 @@ export interface SpendPermissionData {
   end: bigint
   salt: bigint
   extraData: string
+  signature?: string
+  permission?: any
 }
 
 export interface PermissionRequestParams {
@@ -68,75 +72,40 @@ export class SpendPermissionsManager {
         appChainIds: [8453], // Base mainnet
       })
 
-      // Get the Sub Account from the SDK
-      const subAccount = sdk.subAccount.get()
-      
-      // Create the Spend Permission using the Sub Account
-      const now = Math.floor(Date.now() / 1000)
-      const endTime = now + (params.periodInDays * 24 * 60 * 60)
-      const salt = Math.floor(Math.random() * 1000000)
-
-      const message = {
-        account: params.account, // Universal Account
-        spender: params.spender, // Sub Account (spender)
-        token: tokenAddress,
+      // Use the real requestSpendPermission function from the SDK
+      const permission = await requestSpendPermission({
+        account: params.account as `0x${string}`,
+        spender: params.spender as `0x${string}`,
+        token: tokenAddress as `0x${string}`,
+        chainId: 8453, // Base mainnet
         allowance: BigInt(params.allowance * (params.token === 'USDC' ? 1e6 : 1e18)),
-        period: BigInt(params.periodInDays * 24 * 60 * 60),
-        start: BigInt(now),
-        end: BigInt(endTime),
-        salt: BigInt(salt),
-        extraData: '0x'
-      }
-
-      // Request signature from the user's Universal Account using EIP-712
-      const signature = await this.provider.request({
-        method: 'eth_signTypedData_v4',
-        params: [params.account, JSON.stringify({
-          domain: {
-            name: 'SpendPermission',
-            version: '1',
-            chainId: 8453, // Base mainnet
-            verifyingContract: '0x0000000000000000000000000000000000000000' // Base's Spend Permission contract
-          },
-          types: {
-            SpendPermission: [
-              { name: 'account', type: 'address' },
-              { name: 'spender', type: 'address' },
-              { name: 'token', type: 'address' },
-              { name: 'allowance', type: 'uint160' },
-              { name: 'period', type: 'uint48' },
-              { name: 'start', type: 'uint48' },
-              { name: 'end', type: 'uint48' },
-              { name: 'salt', type: 'uint256' },
-              { name: 'extraData', type: 'bytes' }
-            ]
-          },
-          primaryType: 'SpendPermission',
-          message
-        })]
+        periodInDays: params.periodInDays,
+        provider: sdk.getProvider(),
       })
 
-      // Create the permission with the signature
-      const permission: SpendPermissionData = {
-        permissionHash: `0x${Math.random().toString(16).substr(2, 64)}`, // In production, this would be calculated from the signature
-        account: params.account, // Universal Account
-        spender: params.spender, // Sub Account
-        token: tokenAddress,
-        allowance: message.allowance,
-        period: message.period,
-        start: message.start,
-        end: message.end,
-        salt: message.salt,
-        extraData: message.extraData,
+      // Convert the SDK response to our SpendPermissionData format
+      const permissionAny = permission as any
+      const spendPermissionData: SpendPermissionData = {
+        permissionHash: permissionAny.permissionHash || `0x${Math.random().toString(16).substr(2, 64)}`,
+        account: permissionAny.account || params.account,
+        spender: permissionAny.spender || params.spender,
+        token: permissionAny.token || tokenAddress,
+        allowance: permissionAny.allowance || BigInt(params.allowance * (params.token === 'USDC' ? 1e6 : 1e18)),
+        period: permissionAny.period || BigInt(params.periodInDays * 24 * 60 * 60),
+        start: permissionAny.start || BigInt(Math.floor(Date.now() / 1000)),
+        end: permissionAny.end || BigInt(Math.floor(Date.now() / 1000) + (params.periodInDays * 24 * 60 * 60)),
+        salt: permissionAny.salt || BigInt(Math.floor(Math.random() * 1000000)),
+        extraData: permissionAny.extraData || '0x',
+        signature: permissionAny.signature,
+        permission: permission
       }
 
-      console.log('Created Spend Permission with Base Account SDK Sub Account:', { 
-        permission, 
-        signature,
+      console.log('Created Spend Permission with Base Account SDK:', { 
+        spendPermissionData,
         universalAccount: params.account,
         subAccount: params.spender
       })
-      return permission
+      return spendPermissionData
     } catch (error) {
       console.error('Failed to request spend permission:', error)
       throw error
@@ -316,44 +285,37 @@ export class SpendPermissionsManager {
 
   /**
    * Request user to revoke a permission
-   * This implements the real EIP-712 signature flow for revoking Spend Permissions
+   * Uses Base Account SDK's requestRevoke function
    */
   async requestRevokePermission(permission: SpendPermissionData): Promise<string> {
     try {
-      // Create the EIP-712 domain and types for revoking Spend Permissions
-      const domain = {
-        name: 'SpendPermission',
-        version: '1',
-        chainId: 8453, // Base mainnet
-        verifyingContract: '0x0000000000000000000000000000000000000000' // This would be the actual contract address
-      }
-
-      const types = {
-        RevokeSpendPermission: [
-          { name: 'permissionHash', type: 'bytes32' },
-          { name: 'account', type: 'address' }
-        ]
-      }
-
-      const message = {
-        permissionHash: permission.permissionHash,
-        account: permission.account
-      }
-
-      // Request signature from the user's wallet
-      const signature = await this.provider.request({
-        method: 'eth_signTypedData_v4',
-        params: [permission.account, JSON.stringify({ domain, types, primaryType: 'RevokeSpendPermission', message })]
+      // Create Base Account SDK instance
+      const sdk = createBaseAccountSDK({
+        appName: 'Quick Fund',
+        appLogoUrl: 'https://quick-fund-nine.vercel.app/logo.png',
+        appChainIds: [8453], // Base mainnet
       })
 
-      // In a real implementation, you would submit this signature to the contract
-      // For now, we'll return a mock transaction hash
-      const txHash = `0x${Math.random().toString(16).substr(2, 64)}`
+      // Normalize the permission object for requestRevoke
+      const normalizedPermission = {
+        permission: permission.permission || permission,
+        provider: sdk.getProvider(),
+      }
+
+      console.log('🔄 Revoking spend permission:', permission)
       
-      console.log('Revoked Spend Permission with signature:', { permission, signature, txHash })
-      return txHash
+      // Use the real requestRevoke function from the SDK
+      const result = await requestRevoke(normalizedPermission)
+      
+      console.log('✅ Spend permission revoked successfully, result:', result)
+      
+      // requestRevoke returns an object with an 'id' property containing the transaction hash
+      const hash: string = (result as any).id
+      
+      console.log('✅ Final hash:', hash)
+      return hash
     } catch (error) {
-      console.error('Failed to revoke permission:', error)
+      console.error('❌ Failed to revoke spend permission:', error)
       throw error
     }
   }
